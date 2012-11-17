@@ -83,8 +83,7 @@ describe("CSS import inline", function () {
         expect(callback).toHaveBeenCalled();
 
         expect(doc.head.getElementsByTagName("style").length).toEqual(1);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toEqual("p { font-size: 10px; }\n" +
-            "span { font-weight: bold; }");
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/^p \{ font-size\: 10px; \}\s*span \{ font-weight\: bold; \}$/);
     });
 
     it("should not add CSS if no content is given", function () {
@@ -238,7 +237,7 @@ describe("CSS import inline", function () {
 
     it("should not include a document more than once", function () {
         ajaxSpy.andCallFake(function (url, options, callback) {
-            callback('p { padding: 0; }');
+            callback('p { font-weight: bold; }');
         });
 
         rasterizeHTMLTestHelper.addStyleToDocument(doc,
@@ -252,7 +251,7 @@ describe("CSS import inline", function () {
         expect(ajaxSpy).toHaveBeenCalledWith("that.css", jasmine.any(Object), jasmine.any(Function), jasmine.any(Function));
         expect(ajaxSpy.callCount).toEqual(1);
         expect(doc.head.getElementsByTagName("style").length).toEqual(2);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toEqual('p { padding: 0; }');
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/^p \{ font-weight\: bold; \}$/);
         expect(doc.head.getElementsByTagName("style")[1].textContent).toEqual('');
     });
 
@@ -278,7 +277,7 @@ describe("CSS import inline", function () {
         ajaxSpy.andCallFake(function (url, options, callback) {
             if (url === "this.css") {
                 callback('@import url("that.css");\n' +
-                    'span { line-break: none; }');
+                    'span { font-size: 12px; }');
             } else if (url === "that.css") {
                 callback('@import url("this.css");\n' +
                     'p { font-weight: bold; }');
@@ -294,7 +293,7 @@ describe("CSS import inline", function () {
         expect(ajaxSpy).toHaveBeenCalledWith("that.css", jasmine.any(Object), jasmine.any(Function), jasmine.any(Function));
         expect(ajaxSpy.callCount).toEqual(2);
         expect(doc.head.getElementsByTagName("style").length).toEqual(1);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/^p\s+\{\s+font-weight: bold;\s+\}\s+span\s+\{\s+line-break: none;\s+\}\s*$/);
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/^p\s+\{\s+font-weight: bold;\s+\}\s*span\s+\{\s+font-size: 12px;\s+\}\s*$/);
     });
 
     it("should handle recursive imports", function () {
