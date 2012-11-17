@@ -6,7 +6,7 @@ describe("CSS import inline", function () {
 
         extractCssUrlSpy = spyOn(rasterizeHTML.util, "extractCssUrl").andCallFake(function (cssUrl) {
             if (/^url/.test(cssUrl)) {
-                return cssUrl.replace(/^url\("/, '').replace(/"\)$/, '');
+                return cssUrl.replace(/^url\("?/, '').replace(/"?\)$/, '');
             } else {
                 throw "error";
             }
@@ -180,7 +180,7 @@ describe("CSS import inline", function () {
         expect(callback).toHaveBeenCalled();
 
         expect(doc.head.getElementsByTagName("style").length).toEqual(1);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/div\s+\{\s+background-image: url\("this_url\/the_image.png"\);\s+\}\s*$/);
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/div\s+\{\s+background-image: url\("?this_url\/the_image.png"?\);\s+\}\s*$/);
     });
 
     it("should map resources independent of the document base URI", function () {
@@ -205,7 +205,7 @@ describe("CSS import inline", function () {
 
         expect(joinUrlSpy).toHaveBeenCalledWith("this_url/", "that.css");
         expect(doc.head.getElementsByTagName("style").length).toEqual(1);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/div\s+\{\s+background-image: url\("the_image.png"\);\s+\}/);
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/div\s+\{\s+background-image: url\("?the_image.png"?\);\s+\}/);
      });
 
     it("should circumvent caching if requested", function () {

@@ -198,6 +198,31 @@ var rasterizeHTML = (function (window, URI, CSSParser) {
         return url;
     };
 
+    var getArrayForArrayLike = function (list) {
+        return Array.prototype.slice.call(list);
+    };
+
+    var rulesForCssText = function (styleContent) {
+        var doc = document.implementation.createHTMLDocument(""),
+            styleElement = document.createElement("style");
+
+        styleElement.textContent = styleContent;
+        // the style will only parsed once it is added to a document
+        doc.body.appendChild(styleElement);
+
+        return getArrayForArrayLike(styleElement.sheet.cssRules);
+    };
+
+    var cssRulesToText = function (cssRules) {
+        var cssText = "";
+
+        cssRules.forEach(function (rule) {
+            cssText += rule.cssText;
+        });
+        return cssText;
+    };
+
+    // @deprecated
     var parseCss = function (styleContent) {
         var parser = new CSSParser(),
             parsedCSS = parser.parse(styleContent, false, true);
@@ -205,6 +230,7 @@ var rasterizeHTML = (function (window, URI, CSSParser) {
         return parsedCSS;
     };
 
+    // @deprecated
     var findBackgroundImageDeclarations = function (parsedCSS) {
         var declarationsToInline = [],
             i, j, rule;
@@ -227,6 +253,19 @@ var rasterizeHTML = (function (window, URI, CSSParser) {
         return declarationsToInline;
     };
 
+    var findBackgroundImageRules = function (cssRules) {
+        var rulesToInline = [];
+
+        cssRules.forEach(function (rule) {
+            if (rule.type === window.CSSRule.STYLE_RULE && rule.style.backgroundImage) {
+                rulesToInline.push(rule);
+            }
+        });
+
+        return rulesToInline;
+    };
+
+    // @deprecated
     var findFontFaceDescriptors = function (parsedCSS) {
         var descriptorsToInline = [],
             i, j, rule;
@@ -247,6 +286,18 @@ var rasterizeHTML = (function (window, URI, CSSParser) {
         }
 
         return descriptorsToInline;
+    };
+
+    var findFontFaceRules = function (cssRules) {
+        var rulesToInline = [];
+
+        cssRules.forEach(function (rule) {
+            if (rule.type === window.CSSRule.FONT_FACE_RULE && rule.style.getPropertyValue("src")) {
+                rulesToInline.push(rule);
+            }
+        });
+
+        return rulesToInline;
     };
 
     var cloneObject = function(object) {
@@ -363,39 +414,78 @@ var rasterizeHTML = (function (window, URI, CSSParser) {
 
     /* CSS inlining */
 
-    var adjustPathOfDeclarationAndReportChange = function (baseUrl, cssDeclaration) {
+    var adjustCssUrlPath = function (baseUrl, cssUrlPath) {
         var url;
         try {
-            url = module.util.extractCssUrl(cssDeclaration.values[0].cssText());
+            url = module.util.extractCssUrl(cssUrlPath);
         } catch (e) {
-            return false;
+            return cssUrlPath;
         }
 
         if (module.util.isDataUri(url)) {
-            return false;
+            return cssUrlPath;
         }
 
         url = module.util.joinUrl(baseUrl, url);
-        cssDeclaration.values[0].setCssText('url("' + url + '")');
+        return 'url("' + url + '")';
+    };
 
-        return true;
+    var adjustPathOfBackgroundImageRules = function (baseUrl, cssRules) {
+        var backgroundImageRules = findBackgroundImageRules(cssRules),
+            change = false;
+
+        backgroundImageRules.forEach(function (rule) {
+            var oldUrl = rule.style.backgroundImage,
+                newUrl = adjustCssUrlPath(baseUrl, oldUrl);
+
+            if (newUrl !== oldUrl) {
+                change = true;
+                rule.style.backgroundImage = newUrl;
+            }
+        });
+
+        return change;
+    };
+
+    // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=443978
+    var changeFontFaceRuleUrl = function (cssRules, rule, newUrl) {
+        var ruleIdx = cssRules.indexOf(rule),
+            newRule = '@font-face { font-family: ' + rule.style.getPropertyValue("font-family") + '; src: ' + newUrl + '}',
+            styleSheet = rule.parentStyleSheet;
+
+        // Generate a new rule
+        styleSheet.insertRule(newRule, ruleIdx+1);
+        styleSheet.deleteRule(ruleIdx);
+        // Exchange with the
+        cssRules[ruleIdx] = styleSheet.cssRules[ruleIdx];
+    };
+
+    var adjustPathOfFontFaceRules = function (baseUrl, cssRules) {
+        var fontFaceRules = findFontFaceRules(cssRules),
+            change = false;
+
+        fontFaceRules.forEach(function (rule) {
+            var oldUrl = rule.style.getPropertyValue("src"),
+                newUrl = adjustCssUrlPath(baseUrl, oldUrl);
+
+            if (newUrl !== oldUrl) {
+                change = true;
+                changeFontFaceRuleUrl(cssRules, rule, newUrl);
+            }
+        });
+
+        return change;
     };
 
     var adjustPathsOfCssResources = function (baseUrl, styleContent) {
-        var parsedCss = parseCss(styleContent),
-            declarationsToInline = [],
-            change = false,
-            i;
+        var cssRules = rulesForCssText(styleContent),
+            change = false;
 
-        declarationsToInline = declarationsToInline.concat(findBackgroundImageDeclarations(parsedCss));
-        declarationsToInline = declarationsToInline.concat(findFontFaceDescriptors(parsedCss));
-
-        for(i = 0; i < declarationsToInline.length; i++) {
-            change = adjustPathOfDeclarationAndReportChange(baseUrl, declarationsToInline[i]) || change;
-        }
+        change = adjustPathOfBackgroundImageRules(baseUrl, cssRules) || change;
+        change = adjustPathOfFontFaceRules(baseUrl, cssRules) || change;
 
         if (change) {
-            return parsedCss.cssText();
+            return cssRulesToText(cssRules);
         } else {
             return styleContent;
         }

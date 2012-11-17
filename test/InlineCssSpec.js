@@ -6,7 +6,7 @@ describe("CSS inline", function () {
 
         extractCssUrlSpy = spyOn(rasterizeHTML.util, "extractCssUrl").andCallFake(function (cssUrl) {
             if (/^url/.test(cssUrl)) {
-                return cssUrl.replace(/^url\("/, '').replace(/"\)$/, '');
+                return cssUrl.replace(/^url\("?/, '').replace(/"?\)$/, '');
             } else {
                 throw "error";
             }
@@ -204,8 +204,35 @@ describe("CSS inline", function () {
         expect(callback).toHaveBeenCalled();
 
         expect(doc.head.getElementsByTagName("style").length).toEqual(1);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/url\(\"green\.png\"\)/);
-        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/url\(\"below\/fake\.woff\"\)/);
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/url\(\"?green\.png\"?\)/);
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/url\(\"?below\/fake\.woff\"?\)/);
+    });
+
+    it("should keep the font-family when inlining with Webkit", function () {
+        var cssWithRelativeResource;
+
+        cssWithRelativeResource = window.document.createElement("link");
+        cssWithRelativeResource.href = "some.css";
+        cssWithRelativeResource.rel = "stylesheet";
+        cssWithRelativeResource.type = "text/css";
+
+        joinUrlSpy.andCallFake(function (base, url) {
+            return url;
+        });
+        ajaxSpy.andCallFake(function (url, options, success) {
+            if (url === "some.css") {
+                success("@font-face { font-family: 'test font'; src: url('fake.woff'); }");
+            }
+        });
+
+        doc.head.appendChild(cssWithRelativeResource);
+
+        rasterizeHTML.loadAndInlineCSS(doc, callback);
+
+        expect(callback).toHaveBeenCalled();
+
+        expect(doc.head.getElementsByTagName("style").length).toEqual(1);
+        expect(doc.head.getElementsByTagName("style")[0].textContent).toMatch(/@font-face \{ font-family: 'test font'; src: url\(\'?fake\.woff\'?\); \}/);
     });
 
     it("should circumvent caching if requested", function () {
